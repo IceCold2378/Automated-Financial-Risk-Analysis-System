@@ -1,4 +1,4 @@
-# 🛡️ Intelligent Underwriting Assistant — v2.0 Pro
+# 🛡️ Automated Financial Risk Analysis System
 
 A commercial-grade, full-stack AI platform that automates loan application risk analysis using Large Language Models. Built for underwriting professionals who need fast, consistent, and auditable risk assessments.
 
