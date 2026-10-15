@@ -142,13 +142,16 @@ class AgentState(TypedDict, total=False):
 
     # ── Retrieved Context ──
     retrieved_guidelines: list[str]         # Chunks retrieved from vector DB
+    retrieved_sources: list[dict]           # Excerpts with page/section metadata
     retrieval_query: str                    # The query used for retrieval
     retrieval_count: int                    # Number of chunks retrieved
 
     # ── Analysis State ──
     extracted_facts: dict                   # Structured facts from the document
     risk_flags: list[dict]                  # Risk flags found so far
-    compliance_results: list[dict]          # Compliance check outcomes
+    citation_stats: dict                    # Grounded-citation counts
+    llm_ok: bool                            # LLM step produced parseable output
+    llm_risk_score: int | None              # LLM's own overall score
     risk_score: int                         # Calculated risk score (0-100)
     risk_level: str                         # low / moderate / high / critical
 

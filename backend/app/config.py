@@ -83,9 +83,9 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = "./chroma_db"
     CHROMA_COLLECTION_NAME: str = "underwriting_guidelines"
     VECTOR_SEARCH_K: int = 5
-    CHUNK_SIZE: int = 1000
-    CHUNK_OVERLAP: int = 200
-    EMBEDDING_MODEL: str = "openai/text-embedding-3-small"  # OpenRouter/OpenAI embedding model
+    CHUNK_SIZE: int = 500
+    CHUNK_OVERLAP: int = 100
+    EMBEDDING_MODEL: str = "baai/bge-large-en-v1.5"  # OpenRouter/OpenAI embedding model
 
     # --- Document Processing ---
     MAX_FILE_SIZE_MB: int = 25

@@ -9,7 +9,6 @@ import logging
 import re
 from typing import Any
 
-from app.models.schemas import RiskLevel
 
 logger = logging.getLogger(__name__)
 
@@ -120,234 +119,131 @@ def extract_document_facts(document_text: str) -> dict:
     return facts
 
 
-# ── Tool: Calculate Risk Score ────────────────────────────────────
+# ── Tool: Retrieve Cited Sources ──────────────────────────────────
 
-def calculate_risk_score(facts: dict, compliance_results: list[dict]) -> tuple[int, str]:
-    """
-    Deterministic risk score calculation from extracted facts and compliance results.
+CITATION_LABEL = "HUD Handbook 4000.1"
 
-    Returns:
-        (score 0-100, risk_level string)
-    """
-    score = 0
-    penalties = []
-
-    # Credit score penalties
-    credit = facts.get("credit_score")
-    if credit is not None:
-        if credit < 580:
-            score += 35
-            penalties.append(f"Very low credit score ({credit})")
-        elif credit < 620:
-            score += 25
-            penalties.append(f"Poor credit score ({credit})")
-        elif credit < 680:
-            score += 15
-            penalties.append(f"Below threshold credit score ({credit})")
-        elif credit < 720:
-            score += 5
-    else:
-        score += 10
-        penalties.append("Credit score not provided")
-
-    # DTI ratio penalties
-    dti = facts.get("dti_ratio")
-    if dti is not None:
-        if dti > 50:
-            score += 25
-            penalties.append(f"Very high DTI ({dti}%)")
-        elif dti > 40:
-            score += 15
-            penalties.append(f"DTI exceeds 40% threshold ({dti}%)")
-        elif dti > 35:
-            score += 5
-    else:
-        score += 5
-        penalties.append("DTI ratio not provided")
-
-    # LTV ratio penalties
-    ltv = facts.get("ltv_ratio")
-    if ltv is not None:
-        if ltv > 95:
-            score += 20
-            penalties.append(f"Very high LTV ({ltv}%)")
-        elif ltv > 80:
-            score += 10
-            penalties.append(f"LTV exceeds 80% threshold ({ltv}%)")
-    elif facts.get("loan_amount") and facts.get("property_value"):
-        calculated_ltv = (facts["loan_amount"] / facts["property_value"]) * 100
-        if calculated_ltv > 80:
-            score += 10
-            penalties.append(f"Calculated LTV exceeds 80% ({calculated_ltv:.1f}%)")
-
-    # Bankruptcy flag
-    if facts.get("bankruptcy_mentioned"):
-        score += 15
-        penalties.append("Bankruptcy history detected")
-
-    # First-time buyer with high loan
-    loan_amount = facts.get("loan_amount")
-    if facts.get("first_time_buyer") and loan_amount and loan_amount > 500_000:
-        score += 10
-        penalties.append(f"First-time buyer with loan >${loan_amount:,.0f}")
-
-    # Age check
-    age = facts.get("applicant_age")
-    if age is not None and age < 18:
-        score += 20
-        penalties.append(f"Applicant under 18 ({age})")
-
-    # Additional penalties from compliance failures
-    for result in compliance_results:
-        if result.get("violated"):
-            severity = result.get("severity", "moderate")
-            if severity == "critical":
-                score += 15
-            elif severity == "high":
-                score += 10
-            elif severity == "moderate":
-                score += 5
-
-    # Clamp to 0-100
-    score = min(100, max(0, score))
-
-    # Determine risk level
-    if score <= 25:
-        level = RiskLevel.LOW
-    elif score <= 50:
-        level = RiskLevel.MODERATE
-    elif score <= 75:
-        level = RiskLevel.HIGH
-    else:
-        level = RiskLevel.CRITICAL
-
-    logger.info("Risk calculation: score=%d, level=%s, penalties=%d",
-                score, level.value, len(penalties))
-    return score, level.value
-
-
-# ── Tool: Check Compliance ────────────────────────────────────────
-
-COMPLIANCE_RULES = [
-    {
-        "id": "CREDIT_SCORE_MIN",
-        "name": "Minimum Credit Score",
-        "description": "Credit score must be at least 680",
-        "check": lambda facts: (
-            facts.get("credit_score") is not None and facts["credit_score"] < 680
-        ),
-        "severity": "high",
-        "guideline": "Loan Eligibility: minimum acceptable credit score is 680",
-    },
-    {
-        "id": "APPLICANT_AGE",
-        "name": "Minimum Age Requirement",
-        "description": "Applicant must be at least 18 years old",
-        "check": lambda facts: (
-            facts.get("applicant_age") is not None and facts["applicant_age"] < 18
-        ),
-        "severity": "critical",
-        "guideline": "Loan Eligibility: applicant must be at least 18 years old",
-    },
-    {
-        "id": "DTI_RATIO",
-        "name": "Debt-to-Income Ratio",
-        "description": "DTI ratio must not exceed 40%",
-        "check": lambda facts: (
-            facts.get("dti_ratio") is not None and facts["dti_ratio"] > 40
-        ),
-        "severity": "high",
-        "guideline": "Financial Ratios: DTI ratio must not exceed 40%",
-    },
-    {
-        "id": "LTV_RATIO",
-        "name": "Loan-to-Value Ratio",
-        "description": "LTV ratio must not exceed 80% (min 20% down payment)",
-        "check": lambda facts: (
-            facts.get("ltv_ratio") is not None and facts["ltv_ratio"] > 80
-        ),
-        "severity": "high",
-        "guideline": "Financial Ratios: LTV ratio must not exceed 80%",
-    },
-    {
-        "id": "BANKRUPTCY",
-        "name": "Bankruptcy History",
-        "description": "Applicants with bankruptcy must be flagged for manual review",
-        "check": lambda facts: facts.get("bankruptcy_mentioned", False),
-        "severity": "high",
-        "guideline": "Risk Flags: previous bankruptcy requires manual review",
-    },
-    {
-        "id": "FIRST_TIME_BUYER_LIMIT",
-        "name": "First-Time Buyer Loan Limit",
-        "description": "First-time home buyer loan should not exceed $500,000",
-        "check": lambda facts: (
-            facts.get("first_time_buyer")
-            and facts.get("loan_amount") is not None
-            and facts["loan_amount"] > 500_000
-        ),
-        "severity": "moderate",
-        "guideline": "Risk Flags: loan amount should not exceed $500,000 for first-time buyer",
-    },
+# Query expansion only (what to look up); no thresholds or pass/fail rules live here.
+BASE_QUERIES = [
+    "credit history requirements, late payments, bankruptcy, foreclosure",
+    "debt-to-income ratio and evaluating liabilities and debts",
+    "effective income, employment history and stability of income",
+    "assets, reserves, gift funds and minimum required investment",
 ]
+TOPIC_QUERIES = {
+    "bankruptcy": "bankruptcy waiting period after discharge",
+    "foreclosure": "foreclosure waiting period",
+    "collection": "collection accounts and disputed derogatory credit",
+    "self-employ": "self-employment income requirements",
+    "commission": "commission income calculation",
+    "overtime": "overtime and bonus income",
+    "student loan": "student loan monthly payment calculation",
+    "child support": "child support and alimony income",
+    "gift": "gift funds documentation",
+    "rental": "rental income calculation",
+    "social security": "social security and disability income",
+    "retire": "retirement account and pension income",
+}
 
 
-def check_compliance(facts: dict) -> list[dict]:
+def build_retrieval_queries(facts: dict, document_text: str) -> list[str]:
+    """Build focused retrieval queries from extracted facts and topics seen in the document."""
+    queries = list(BASE_QUERIES)
+    if facts.get("credit_score"):
+        queries.append("minimum credit score requirements")
+    if facts.get("dti_ratio"):
+        queries.append("total debt-to-income qualifying ratio")
+    if facts.get("loan_amount") or facts.get("down_payment"):
+        queries.append("minimum required investment and down payment")
+    lowered = document_text.lower()
+    queries += [q for kw, q in TOPIC_QUERIES.items() if kw in lowered]
+    return queries
+
+
+def retrieve_sources(queries: list[str], retriever: Any, max_chunks: int = 12) -> list[dict]:
+    """Run all queries (concurrently), dedupe, and return chunks with page/section metadata."""
+    try:
+        results = retriever.batch([q[:2000] for q in queries])
+    except Exception as e:
+        logger.error("Guideline retrieval failed: %s", e)
+        return []
+    seen, sources = set(), []
+    # Interleave so every query contributes its best hit before any query's lower hits.
+    for rank in range(max((len(r) for r in results), default=0)):
+        for docs in results:
+            if rank < len(docs):
+                d = docs[rank]
+                key = (d.metadata.get("page"), d.page_content[:80])
+                if key not in seen:
+                    seen.add(key)
+                    sources.append({"page": d.metadata.get("page"), "section": d.metadata.get("section", ""),
+                                    "text": d.page_content})
+    return sources[:max_chunks]
+
+
+def format_sources(sources: list[dict]) -> str:
+    """Render sources for the prompt, each headed by the citation label the LLM must copy."""
+    return "\n\n".join(f"[{CITATION_LABEL}, p.{s['page']}] ({s['section']})\n{s['text']}" for s in sources)
+
+
+# ── Tool: Validate Citations ──────────────────────────────────────
+
+_PAGE_RE = re.compile(r"p(?:p|age)?\.?\s*(\d{1,4})", re.I)
+
+
+def validate_citations(flags: list[dict], sources: list[dict]) -> tuple[list[dict], dict]:
     """
-    Run the extracted facts against all compliance rules.
+    Ground every risk flag's citation in the retrieved sources.
 
-    Returns a list of compliance check results, each containing:
-    - rule_id, rule_name, violated (bool), severity, guideline_reference
+    A citation is grounded when a page it names was actually retrieved. Grounded citations are
+    normalized to "HUD Handbook 4000.1, p.N (section)"; ungrounded ones are marked and their
+    confidence capped, so unsupported claims never look authoritative.
     """
-    results = []
-    for rule in COMPLIANCE_RULES:
-        try:
-            violated = rule["check"](facts)
-        except Exception:
-            violated = False
+    by_page = {s["page"]: s["section"] for s in sources}
+    out, grounded = [], 0
+    for f in flags:
+        f = dict(f)
+        pages = [int(p) for p in _PAGE_RE.findall(f.get("guideline_reference", "") or "")]
+        hit = next((p for p in pages if p in by_page), None)
+        if hit is not None:
+            f["guideline_reference"] = f"{CITATION_LABEL}, p.{hit} ({by_page[hit]})"
+            f["grounded"] = True
+            grounded += 1
+        else:
+            f["guideline_reference"] = "Uncited: no supporting handbook excerpt was retrieved"
+            f["confidence"] = min(float(f.get("confidence", 0.5)), 0.4)
+            f["grounded"] = False
+        out.append(f)
+    stats = {"flags": len(out), "grounded": grounded,
+             "grounded_rate": (grounded / len(out)) if out else 1.0}
+    return out, stats
 
-        results.append({
-            "rule_id": rule["id"],
-            "rule_name": rule["name"],
-            "description": rule["description"],
-            "violated": violated,
-            "severity": rule["severity"] if violated else "none",
-            "guideline_reference": rule["guideline"],
-        })
 
-    violated_count = sum(1 for r in results if r["violated"])
-    logger.info("Compliance check: %d/%d rules violated", violated_count, len(results))
-    return results
+# ── Tool: Risk Score & Recommendation ─────────────────────────────
+
+SEVERITY_WEIGHT = {"low": 5, "moderate": 10, "high": 20, "critical": 35}
 
 
-# ── Tool: Determine Recommendation ───────────────────────────────
+def risk_level_for(score: int) -> str:
+    return "low" if score <= 25 else "moderate" if score <= 50 else "high" if score <= 75 else "critical"
 
-def determine_recommendation(risk_score: int, compliance_results: list[dict]) -> str:
+
+def calculate_risk_score(flags: list[dict], llm_score: int | None = None) -> tuple[int, str]:
     """
-    Determine the final recommendation based on risk score and compliance results.
-
-    Returns: "APPROVE", "DENY", or "MANUAL_REVIEW"
+    Score = severity-weighted sum of *grounded* flags, averaged with the LLM's own score when
+    available. Ungrounded flags do not raise the score.
     """
-    # Auto-deny conditions
-    critical_violations = [
-        r for r in compliance_results
-        if r["violated"] and r["severity"] == "critical"
-    ]
-    if critical_violations:
+    weighted = min(100, sum(SEVERITY_WEIGHT.get(f.get("severity", "moderate"), 10)
+                            for f in flags if f.get("grounded")))
+    score = weighted if llm_score is None else round((weighted + min(100, max(0, llm_score))) / 2)
+    return score, risk_level_for(score)
+
+
+def determine_recommendation(risk_score: int, flags: list[dict]) -> str:
+    """APPROVE / DENY / MANUAL_REVIEW from the score and grounded flag severities."""
+    grounded = [f for f in flags if f.get("grounded")]
+    if any(f.get("severity") == "critical" for f in grounded) or risk_score >= 76:
         return "DENY"
-
-    if risk_score >= 76:
-        return "DENY"
-
-    # Manual review conditions
-    high_violations = [
-        r for r in compliance_results
-        if r["violated"] and r["severity"] == "high"
-    ]
-    if high_violations or risk_score >= 51:
+    if any(f.get("severity") in ("high", "critical") for f in flags) or risk_score >= 26:
         return "MANUAL_REVIEW"
-
-    if risk_score >= 26:
-        return "MANUAL_REVIEW"
-
     return "APPROVE"

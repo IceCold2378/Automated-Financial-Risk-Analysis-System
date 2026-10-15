@@ -73,3 +73,12 @@ def test_retrieval_hit_rate_on_golden_set(tmp_path):
     m = evaluate_retrieval(retriever, load_golden())
     print(f"\nhit_rate={m['hit_rate']:.3f} mrr={m['mrr']:.3f} p50={m['latency_p50_ms']:.0f}ms")
     assert m["hit_rate"] >= 0.85
+
+
+def test_e2e_applications_reference_existing_pages():
+    from evaluation.e2e import load_apps
+    pages = _pages()
+    apps = load_apps()
+    assert len(apps) >= 10
+    for a in apps:
+        assert all(p in pages for p in a["expected_pages"]), a["id"]

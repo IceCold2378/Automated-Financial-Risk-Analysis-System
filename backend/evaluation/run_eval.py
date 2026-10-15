@@ -34,6 +34,10 @@ SWEEP = [
     (1000, 200, 5, "baai/bge-base-en-v1.5"),
     (500, 100, 5, "baai/bge-base-en-v1.5"),
     (1000, 200, 5, "openai/text-embedding-3-large"),
+    (500, 100, 5, "baai/bge-large-en-v1.5"),
+    (500, 100, 5, "qwen/qwen3-embedding-8b"),
+    (500, 100, 5, "google/gemini-embedding-001"),
+    (500, 100, 5, "openai/text-embedding-3-large"),
 ]
 
 

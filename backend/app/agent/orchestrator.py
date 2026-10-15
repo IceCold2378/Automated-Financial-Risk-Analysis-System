@@ -6,7 +6,7 @@ performs a focused task (retrieve, extract, analyze, check compliance, etc.)
 and edges control the flow based on state conditions.
 
 Flow:
-  START → extract_facts → retrieve_context → llm_analyze → check_compliance
+  START → extract_facts → retrieve_context → llm_analyze → validate_citations
         → calculate_risk → generate_output → END
 """
 
@@ -18,11 +18,13 @@ from langgraph.graph import StateGraph, START, END
 
 from app.agent.state import AgentState, AgentConfig, AgentTrace, StepStatus
 from app.agent.tools import (
-    retrieve_guidelines,
-    extract_document_facts,
+    build_retrieval_queries,
     calculate_risk_score,
-    check_compliance,
     determine_recommendation,
+    extract_document_facts,
+    format_sources,
+    retrieve_sources,
+    validate_citations,
 )
 from app.models.schemas import AnalysisResult, RiskFlag, RiskLevel
 
@@ -76,8 +78,8 @@ def node_extract_facts(state: AgentState) -> dict:
 
 def node_retrieve_context(state: AgentState) -> dict:
     """
-    Node 2: Retrieve relevant guidelines from the vector database.
-    Uses the document text as the search query.
+    Node 2: Retrieve relevant handbook excerpts (with page/section metadata) using
+    several focused queries built from the extracted facts and topics in the document.
     """
     trace = AgentTrace.from_dict(state.get("trace", {}))
     step = trace.add_step("retrieve_context")
@@ -88,35 +90,22 @@ def node_retrieve_context(state: AgentState) -> dict:
         from app.services.vector_service import get_retriever
         retriever = get_retriever()
 
-        document_text = state["document_text"]
-        # Use a focused query: combine key facts with document start
-        facts = state.get("extracted_facts", {})
-        query_parts = []
-        if facts.get("credit_score"):
-            query_parts.append(f"credit score {facts['credit_score']}")
-        if facts.get("dti_ratio"):
-            query_parts.append(f"DTI ratio {facts['dti_ratio']}%")
-        if facts.get("loan_amount"):
-            query_parts.append(f"loan amount ${facts['loan_amount']:,.0f}")
-        if facts.get("bankruptcy_mentioned"):
-            query_parts.append("bankruptcy history")
+        queries = build_retrieval_queries(state.get("extracted_facts", {}), state["document_text"])
+        sources = retrieve_sources(queries, retriever)
 
-        query = " ".join(query_parts) if query_parts else document_text[:2000]
-
-        chunks = retrieve_guidelines(query, retriever)
-
-        step.input_summary = f"Query: {query[:200]}..."
-        step.output_summary = f"Retrieved {len(chunks)} guideline chunks"
-        step.tool_calls = [{"tool": "retrieve_guidelines", "chunks": len(chunks)}]
+        step.input_summary = f"{len(queries)} queries"
+        step.output_summary = f"Retrieved {len(sources)} excerpts from pages {sorted({s['page'] for s in sources})}"
+        step.tool_calls = [{"tool": "retrieve_sources", "queries": len(queries), "chunks": len(sources)}]
         step.status = StepStatus.COMPLETE
         step.duration_ms = (time.time() - start) * 1000
 
         return {
-            "retrieved_guidelines": chunks,
-            "retrieval_query": query,
-            "retrieval_count": len(chunks),
+            "retrieved_sources": sources,
+            "retrieved_guidelines": [s["text"] for s in sources],
+            "retrieval_query": " | ".join(queries),
+            "retrieval_count": len(sources),
             "reasoning": state.get("reasoning", []) + [
-                f"Retrieved {len(chunks)} relevant guideline sections"
+                f"Retrieved {len(sources)} handbook excerpts using {len(queries)} queries"
             ],
             "trace": trace.to_dict(),
         }
@@ -126,6 +115,7 @@ def node_retrieve_context(state: AgentState) -> dict:
         step.duration_ms = (time.time() - start) * 1000
         logger.exception("retrieve_context node failed: %s", e)
         return {
+            "retrieved_sources": [],
             "retrieved_guidelines": [],
             "retrieval_count": 0,
             "trace": trace.to_dict(),
@@ -135,8 +125,8 @@ def node_retrieve_context(state: AgentState) -> dict:
 
 def node_llm_analyze(state: AgentState) -> dict:
     """
-    Node 3: Use the LLM to perform deep analysis of the document
-    against the retrieved guidelines. This is the core AI reasoning step.
+    Node 3: Ask the LLM to analyze the application against the retrieved excerpts.
+    Each flag must cite one of the excerpt pages; citations are verified in the next node.
     """
     trace = AgentTrace.from_dict(state.get("trace", {}))
     step = trace.add_step("llm_analyze")
@@ -144,40 +134,44 @@ def node_llm_analyze(state: AgentState) -> dict:
     start = time.time()
 
     try:
-        from app.services.ai_service import get_rag_chain
+        from app.services.ai_service import get_analysis_chain
 
         document_text = state["document_text"]
-        chain = get_rag_chain()
+        sources = state.get("retrieved_sources", [])
+        if not sources:
+            raise RuntimeError("No guideline excerpts were retrieved; cannot analyze without grounding")
+        step.input_summary = f"Document ({len(document_text)} chars) + {len(sources)} excerpts"
 
-        step.input_summary = f"Document ({len(document_text)} chars) + guidelines"
-
-        # LCEL chain takes the input text directly as a string
-        raw_answer = chain.invoke(document_text)
+        raw_answer = get_analysis_chain().invoke(
+            {"context": format_sources(sources), "input": document_text}
+        )
 
         step.output_summary = f"LLM response: {len(raw_answer)} chars"
-        step.tool_calls = [{"tool": "rag_chain.invoke", "response_length": len(raw_answer)}]
+        step.tool_calls = [{"tool": "analysis_chain.invoke", "response_length": len(raw_answer)}]
         step.status = StepStatus.COMPLETE
         step.duration_ms = (time.time() - start) * 1000
-
-        # Try to parse JSON from LLM response
 
         text = raw_answer.strip()
         if text.startswith("```"):
             lines = text.split("\n")
             text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:]).strip()
 
+        llm_ok, llm_flags, llm_summary, llm_detailed, llm_score = True, [], raw_answer[:500], raw_answer, None
         try:
             data = json.loads(text)
-            llm_risk_flags = data.get("risk_flags", [])
+            llm_flags = data.get("risk_flags", [])
             llm_summary = data.get("summary", "")
             llm_detailed = data.get("detailed_analysis", raw_answer)
-        except json.JSONDecodeError:
-            logger.warning("LLM did not return JSON, using raw text")
-            llm_summary = raw_answer[:500]
+            llm_score = int(data["overall_risk_score"]) if "overall_risk_score" in data else None
+        except (json.JSONDecodeError, TypeError, ValueError):
+            logger.warning("LLM did not return valid JSON, using raw text")
+            llm_ok = False
 
         return {
             "summary": llm_summary,
             "detailed_analysis": llm_detailed,
+            "llm_ok": llm_ok,
+            "llm_risk_score": llm_score,
             "risk_flags": [
                 {
                     "category": f.get("category", "Unknown"),
@@ -186,10 +180,10 @@ def node_llm_analyze(state: AgentState) -> dict:
                     "guideline_reference": f.get("guideline_reference", ""),
                     "confidence": min(1.0, max(0.0, float(f.get("confidence", 0.5)))),
                 }
-                for f in llm_risk_flags
+                for f in llm_flags
             ],
             "reasoning": state.get("reasoning", []) + [
-                f"LLM analysis complete — found {len(llm_risk_flags)} risk flags"
+                f"LLM analysis complete — found {len(llm_flags)} risk flags"
             ],
             "trace": trace.to_dict(),
         }
@@ -202,56 +196,35 @@ def node_llm_analyze(state: AgentState) -> dict:
             "summary": "Analysis could not be completed due to an AI service error.",
             "detailed_analysis": str(e),
             "risk_flags": [],
+            "llm_ok": False,
             "trace": trace.to_dict(),
             "error": str(e),
         }
 
 
-def node_check_compliance(state: AgentState) -> dict:
+def node_validate_citations(state: AgentState) -> dict:
     """
-    Node 4: Run deterministic compliance checks against extracted facts.
-    This produces a structured list of pass/fail results per rule.
+    Node 4: Verify that every flag's citation points at an excerpt that was actually retrieved.
+    Ungrounded citations are marked and their confidence capped.
     """
     trace = AgentTrace.from_dict(state.get("trace", {}))
-    step = trace.add_step("check_compliance")
+    step = trace.add_step("validate_citations")
     step.status = StepStatus.RUNNING
     start = time.time()
 
     try:
-        facts = state.get("extracted_facts", {})
-        step.input_summary = f"Checking {len(facts)} extracted facts"
-
-        results = check_compliance(facts)
-
-        violations = [r for r in results if r["violated"]]
-        step.output_summary = f"{len(violations)}/{len(results)} rules violated"
-        step.tool_calls = [{"tool": "check_compliance", "violations": len(violations)}]
+        flags, stats = validate_citations(state.get("risk_flags", []), state.get("retrieved_sources", []))
+        step.input_summary = f"{stats['flags']} flags"
+        step.output_summary = f"{stats['grounded']}/{stats['flags']} citations grounded in retrieved pages"
+        step.tool_calls = [{"tool": "validate_citations", **stats}]
         step.status = StepStatus.COMPLETE
         step.duration_ms = (time.time() - start) * 1000
-
-        # Merge compliance violations into risk flags
-        existing_flags = state.get("risk_flags", [])
-        compliance_flags = [
-            {
-                "category": r["rule_name"],
-                "description": r["description"],
-                "severity": r["severity"],
-                "guideline_reference": r["guideline_reference"],
-                "confidence": 1.0,  # Deterministic = full confidence
-            }
-            for r in results if r["violated"]
-        ]
-
-        # Deduplicate by category
-        seen = {f["category"] for f in existing_flags}
-        new_flags = [f for f in compliance_flags if f["category"] not in seen]
-
         return {
-            "compliance_results": results,
-            "risk_flags": existing_flags + new_flags,
-            "guidelines_checked": len(results),
+            "risk_flags": flags,
+            "citation_stats": stats,
+            "guidelines_checked": len({s["page"] for s in state.get("retrieved_sources", [])}),
             "reasoning": state.get("reasoning", []) + [
-                f"Compliance check: {len(violations)} violations found across {len(results)} rules"
+                f"Citation check: {stats['grounded']}/{stats['flags']} flags cite retrieved handbook pages"
             ],
             "trace": trace.to_dict(),
         }
@@ -259,18 +232,14 @@ def node_check_compliance(state: AgentState) -> dict:
         step.status = StepStatus.FAILED
         step.error = str(e)
         step.duration_ms = (time.time() - start) * 1000
-        logger.exception("check_compliance node failed: %s", e)
-        return {
-            "compliance_results": [],
-            "trace": trace.to_dict(),
-            "error": str(e),
-        }
+        logger.exception("validate_citations node failed: %s", e)
+        return {"trace": trace.to_dict(), "error": str(e)}
 
 
 def node_calculate_risk(state: AgentState) -> dict:
     """
-    Node 5: Calculate the final risk score and recommendation
-    based on facts, compliance results, and LLM findings.
+    Node 5: Score the application from grounded flags (+ the LLM's own score) and
+    recommend. If the LLM step failed, fail safe to MANUAL_REVIEW rather than approve.
     """
     trace = AgentTrace.from_dict(state.get("trace", {}))
     step = trace.add_step("calculate_risk")
@@ -278,13 +247,14 @@ def node_calculate_risk(state: AgentState) -> dict:
     start = time.time()
 
     try:
-        facts = state.get("extracted_facts", {})
-        compliance_results = state.get("compliance_results", [])
+        flags = state.get("risk_flags", [])
+        if state.get("llm_ok", False):
+            risk_score, risk_level = calculate_risk_score(flags, state.get("llm_risk_score"))
+            recommendation = determine_recommendation(risk_score, flags)
+        else:
+            risk_score, risk_level, recommendation = 50, RiskLevel.MODERATE.value, "MANUAL_REVIEW"
 
-        risk_score, risk_level = calculate_risk_score(facts, compliance_results)
-        recommendation = determine_recommendation(risk_score, compliance_results)
-
-        step.input_summary = f"Facts + {len(compliance_results)} compliance results"
+        step.input_summary = f"{len(flags)} flags"
         step.output_summary = f"Score={risk_score}, Level={risk_level}, Rec={recommendation}"
         step.tool_calls = [
             {"tool": "calculate_risk_score", "score": risk_score, "level": risk_level},
@@ -382,7 +352,7 @@ def _build_graph() -> StateGraph:
     Construct the agent graph:
 
         START → extract_facts → retrieve_context → llm_analyze
-              → check_compliance → calculate_risk → generate_output → END
+              → validate_citations → calculate_risk → generate_output → END
     """
     graph = StateGraph(AgentState)
 
@@ -390,7 +360,7 @@ def _build_graph() -> StateGraph:
     graph.add_node("extract_facts", node_extract_facts)
     graph.add_node("retrieve_context", node_retrieve_context)
     graph.add_node("llm_analyze", node_llm_analyze)
-    graph.add_node("check_compliance", node_check_compliance)
+    graph.add_node("validate_citations", node_validate_citations)
     graph.add_node("calculate_risk", node_calculate_risk)
     graph.add_node("generate_output", node_generate_output)
 
@@ -398,8 +368,8 @@ def _build_graph() -> StateGraph:
     graph.add_edge(START, "extract_facts")
     graph.add_edge("extract_facts", "retrieve_context")
     graph.add_edge("retrieve_context", "llm_analyze")
-    graph.add_edge("llm_analyze", "check_compliance")
-    graph.add_edge("check_compliance", "calculate_risk")
+    graph.add_edge("llm_analyze", "validate_citations")
+    graph.add_edge("validate_citations", "calculate_risk")
     graph.add_edge("calculate_risk", "generate_output")
     graph.add_edge("generate_output", END)
 
@@ -457,10 +427,10 @@ async def run_agent_analysis(
         },
         "extracted_facts": {},
         "retrieved_guidelines": [],
+        "retrieved_sources": [],
         "retrieval_query": "",
         "retrieval_count": 0,
         "risk_flags": [],
-        "compliance_results": [],
         "risk_score": 50,
         "risk_level": "moderate",
         "current_step": "start",

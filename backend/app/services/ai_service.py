@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 _rag_chain = None
+_analysis_chain = None
 
 
 # ── Prompt Template ────────────────────────────────────────────────
@@ -31,7 +32,7 @@ SYSTEM_PROMPT = """You are an expert underwriting risk analyst at a major financ
 Your task is to perform a thorough risk analysis of a loan application against the provided
 underwriting guidelines. You must be precise, objective, and thorough.
 
-UNDERWRITING GUIDELINES:
+UNDERWRITING GUIDELINE EXCERPTS (each headed by its citation label):
 {context}
 
 LOAN APPLICATION:
@@ -48,7 +49,7 @@ Analyze the application carefully and respond with ONLY a valid JSON object (no 
             "category": "<risk category name>",
             "description": "<specific description of the risk>",
             "severity": "<one of: low, moderate, high, critical>",
-            "guideline_reference": "<which specific guideline was violated>",
+            "guideline_reference": "<copy the citation label of the excerpt that supports this flag, e.g. HUD Handbook 4000.1, p.192>",
             "confidence": <float 0.0 to 1.0>
         }}
     ],
@@ -59,7 +60,8 @@ Analyze the application carefully and respond with ONLY a valid JSON object (no 
 
 IMPORTANT RULES:
 - Respond ONLY with the JSON object, no markdown, no explanation before or after
-- Check EVERY guideline against the application
+- Base every flag ONLY on the excerpts above; cite one excerpt's page per flag using its exact label
+- If no excerpt supports a concern, still flag it but leave guideline_reference empty
 - If information is missing from the application, flag it as a risk
 - Be conservative — when in doubt, flag for manual review
 - Risk score guidelines: 0-25=low, 26-50=moderate, 51-75=high, 76-100=critical
@@ -170,6 +172,14 @@ def build_rag_chain(retriever):
     logger.info("RAG chain built successfully (provider=%s, model=%s)",
                 settings.LLM_PROVIDER.value, model_name)
     return _rag_chain
+
+
+def get_analysis_chain():
+    """Prompt | LLM | parser chain that takes {context, input}; context is built by the agent."""
+    global _analysis_chain
+    if _analysis_chain is None:
+        _analysis_chain = ChatPromptTemplate.from_messages([("system", SYSTEM_PROMPT)]) | _get_llm() | StrOutputParser()
+    return _analysis_chain
 
 
 def get_rag_chain():

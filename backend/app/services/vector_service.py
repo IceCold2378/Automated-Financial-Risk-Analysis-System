@@ -8,6 +8,7 @@ Guidelines come either from a plain .txt file or from a page-level .jsonl corpus
 
 import json
 import os
+import re
 import logging
 
 from langchain_community.document_loaders import TextLoader
@@ -92,7 +93,11 @@ def build_vector_db(
     chunk_overlap = settings.CHUNK_OVERLAP if chunk_overlap is None else chunk_overlap
     k = k or settings.VECTOR_SEARCH_K
     persist_dir = persist_dir if persist_dir is not None else settings.CHROMA_PERSIST_DIR
-    collection_name = collection_name or settings.CHROMA_COLLECTION_NAME
+    if not collection_name:
+        # Encode the index-affecting settings so changing the embedding model or chunking
+        # builds a fresh collection instead of mixing incompatible vectors.
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", settings.EMBEDDING_MODEL).strip("-")
+        collection_name = f"{settings.CHROMA_COLLECTION_NAME}_{slug}_{chunk_size}_{chunk_overlap}"[:100]
     embeddings = embeddings or get_embeddings()
 
     store = Chroma(

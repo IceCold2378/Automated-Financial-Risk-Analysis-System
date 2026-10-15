@@ -5,8 +5,8 @@
 |---|---|---|
 | API | `backend/app/routers/` (`auth`, `analysis`, `streaming` SSE, `admin`, `health`, `integrations`) | prefix `/api/v1`; JWT / API-key auth in `dependencies.py` |
 | Middleware | `backend/app/middleware/` | request logging, slowapi rate limit (Redis) |
-| Agent graph | `backend/app/agent/orchestrator.py` | LangGraph nodes: `extract_facts` → `retrieve_context` → `llm_analyze` → `check_compliance` → `calculate_risk` → `generate_output` |
-| Rule tools | `backend/app/agent/tools.py` | regex fact extraction, **hard-coded** thresholds (credit 680, DTI 40%, LTV 80%), risk scoring |
+| Agent graph | `backend/app/agent/orchestrator.py` | LangGraph nodes: `extract_facts` → `retrieve_context` (multi-query, page metadata) → `llm_analyze` (cites excerpt pages) → `validate_citations` (grounding check) → `calculate_risk` → `generate_output` |
+| Agent tools | `backend/app/agent/tools.py` | regex fact extraction, query building, source retrieval, citation validation, severity-based scoring (no hard-coded underwriting thresholds) |
 | Retrieval | `backend/app/services/vector_service.py` | corpus loader, chunker, Chroma, retriever |
 | LLM / RAG | `backend/app/services/ai_service.py` | provider switch (OpenRouter/OpenAI/Azure/Anthropic/Ollama), LCEL RAG chain, JSON parsing |
 | Documents | `backend/app/services/document_service.py` | PDF/DOCX/TXT text extraction |
@@ -32,7 +32,13 @@ docker-compose up --build   # full stack
 - Startup re-embedded and duplicated chunks into the persistent collection on every restart: now reused unless `force_rebuild`.
 - `admin.py` called `build_vector_db(force_rebuild=True)`, which the old signature did not accept: fixed by the new signature.
 
+## Citation grounding (how answers are cited)
+1. `retrieve_context` builds several focused queries (base topics + facts + topics seen in the document) and retrieves excerpts with their handbook page and section.
+2. `llm_analyze` sees each excerpt under a label like `[HUD Handbook 4000.1, p.192]` and must copy one label into each flag's `guideline_reference`.
+3. `validate_citations` keeps a citation only if the named page was actually retrieved; otherwise the flag is marked `Uncited` and its confidence capped at 0.4. Ungrounded flags do not raise the score.
+4. If the LLM step fails or returns non-JSON, the recommendation fails safe to `MANUAL_REVIEW`, never `APPROVE`.
+
 ## Known issues (not yet fixed)
-- Final citations (`guideline_reference`) come from the hard-coded rules in `agent/tools.py`, not from retrieved HUD chunks; retrieval only feeds the LLM node.
-- `node_llm_analyze` raises `NameError` when the LLM returns non-JSON (`llm_risk_flags` unbound); the exception handler masks it.
+- Chunks never span pages (page is the citation unit); rules continued across a page break can be split.
 - `datetime.utcnow()` deprecation warnings (Python 3.12+).
+- Section labels are approximate (nearest heading detected in the PDF text).

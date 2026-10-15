@@ -4,11 +4,15 @@ Tests for the agentic analysis pipeline.
 
 
 from app.agent.state import AgentConfig, AgentTrace, StepStatus
+from app.agent.orchestrator import node_calculate_risk, node_llm_analyze
 from app.agent.tools import (
-    extract_document_facts,
+    build_retrieval_queries,
     calculate_risk_score,
-    check_compliance,
     determine_recommendation,
+    extract_document_facts,
+    format_sources,
+    retrieve_sources,
+    validate_citations,
 )
 
 
@@ -67,125 +71,138 @@ class TestExtractDocumentFacts:
         assert facts["bankruptcy_mentioned"] is False
 
 
-class TestCalculateRiskScore:
-    """Test the deterministic risk scoring algorithm."""
-
-    def test_low_risk_applicant(self):
-        facts = {"credit_score": 780, "dti_ratio": 25.0, "ltv_ratio": 70.0}
-        score, level = calculate_risk_score(facts, [])
-        assert score <= 25
-        assert level == "low"
-
-    def test_high_risk_low_credit(self):
-        facts = {"credit_score": 550, "dti_ratio": 30.0}
-        score, level = calculate_risk_score(facts, [])
-        assert score >= 35
-        assert level in ("moderate", "high")
-
-    def test_high_risk_high_dti(self):
-        facts = {"credit_score": 700, "dti_ratio": 55.0}
-        score, level = calculate_risk_score(facts, [])
-        assert score >= 25
-
-    def test_bankruptcy_adds_penalty(self):
-        no_bankruptcy = {"credit_score": 700, "bankruptcy_mentioned": False}
-        with_bankruptcy = {"credit_score": 700, "bankruptcy_mentioned": True}
-        score_no, _ = calculate_risk_score(no_bankruptcy, [])
-        score_with, _ = calculate_risk_score(with_bankruptcy, [])
-        assert score_with > score_no
-
-    def test_missing_data_adds_penalty(self):
-        no_data = {}
-        score, _ = calculate_risk_score(no_data, [])
-        assert score >= 10  # Penalty for missing credit score + DTI
-
-    def test_compliance_violations_increase_score(self):
-        facts = {"credit_score": 700}
-        violations = [
-            {"violated": True, "severity": "critical"},
-            {"violated": True, "severity": "high"},
-        ]
-        score, _ = calculate_risk_score(facts, violations)
-        assert score >= 25
+SOURCES = [
+    {"page": 188, "section": "Evaluating Credit History (TOTAL)", "text": "Disputed derogatory credit..."},
+    {"page": 192, "section": "Evaluating Liabilities and Debts (TOTAL)", "text": "Late mortgage payments..."},
+]
 
 
-class TestCheckCompliance:
-    """Test the compliance rule engine."""
-
-    def test_credit_below_threshold(self):
-        facts = {"credit_score": 600}
-        results = check_compliance(facts)
-        credit_rule = next(r for r in results if r["rule_id"] == "CREDIT_SCORE_MIN")
-        assert credit_rule["violated"] is True
-
-    def test_credit_above_threshold(self):
-        facts = {"credit_score": 720}
-        results = check_compliance(facts)
-        credit_rule = next(r for r in results if r["rule_id"] == "CREDIT_SCORE_MIN")
-        assert credit_rule["violated"] is False
-
-    def test_dti_violation(self):
-        facts = {"dti_ratio": 45.0}
-        results = check_compliance(facts)
-        dti_rule = next(r for r in results if r["rule_id"] == "DTI_RATIO")
-        assert dti_rule["violated"] is True
-
-    def test_bankruptcy_flag(self):
-        facts = {"bankruptcy_mentioned": True}
-        results = check_compliance(facts)
-        bankruptcy_rule = next(r for r in results if r["rule_id"] == "BANKRUPTCY")
-        assert bankruptcy_rule["violated"] is True
-
-    def test_underage_applicant(self):
-        facts = {"applicant_age": 17}
-        results = check_compliance(facts)
-        age_rule = next(r for r in results if r["rule_id"] == "APPLICANT_AGE")
-        assert age_rule["violated"] is True
-        assert age_rule["severity"] == "critical"
-
-    def test_all_pass_good_applicant(self):
-        facts = {
-            "credit_score": 750,
-            "dti_ratio": 25.0,
-            "ltv_ratio": 70.0,
-            "applicant_age": 35,
-            "bankruptcy_mentioned": False,
-            "first_time_buyer": False,
-        }
-        results = check_compliance(facts)
-        violations = [r for r in results if r["violated"]]
-        assert len(violations) == 0
+class _Doc:
+    def __init__(self, page, text):
+        self.page_content, self.metadata = text, {"page": page, "section": "S"}
 
 
-class TestDetermineRecommendation:
-    """Test the recommendation logic."""
-
-    def test_approve_low_risk(self):
-        rec = determine_recommendation(15, [])
-        assert rec == "APPROVE"
-
-    def test_deny_critical_violation(self):
-        results = [{"violated": True, "severity": "critical"}]
-        rec = determine_recommendation(30, results)
-        assert rec == "DENY"
-
-    def test_deny_very_high_score(self):
-        rec = determine_recommendation(85, [])
-        assert rec == "DENY"
-
-    def test_manual_review_moderate_risk(self):
-        rec = determine_recommendation(40, [])
-        assert rec == "MANUAL_REVIEW"
-
-    def test_manual_review_high_violations(self):
-        results = [{"violated": True, "severity": "high"}]
-        rec = determine_recommendation(20, results)
-        assert rec == "MANUAL_REVIEW"
+class _BatchRetriever:
+    def batch(self, queries):
+        return [[_Doc(188, "a" * 90), _Doc(192, "b" * 90)] for _ in queries]
 
 
-# ══════════════════════════════════════════════════════════════════
-#  State / Trace Tests
-# ══════════════════════════════════════════════════════════════════
+class TestRetrieveSources:
+    def test_queries_follow_facts_and_topics(self):
+        qs = build_retrieval_queries({"credit_score": 700, "dti_ratio": 45.0},
+                                     "Applicant is self-employed and had a bankruptcy.")
+        assert "minimum credit score requirements" in qs
+        assert "total debt-to-income qualifying ratio" in qs
+        assert any("self-employment" in q for q in qs) and any("bankruptcy" in q for q in qs)
+
+    def test_dedupes_and_keeps_page_metadata(self):
+        sources = retrieve_sources(["q1", "q2", "q3"], _BatchRetriever())
+        assert [s["page"] for s in sources] == [188, 192]
+
+    def test_respects_max_chunks(self):
+        assert len(retrieve_sources(["q"], _BatchRetriever(), max_chunks=1)) == 1
+
+    def test_retrieval_failure_returns_empty(self):
+        class Boom:
+            def batch(self, q):
+                raise RuntimeError("embedding api down")
+        assert retrieve_sources(["q"], Boom()) == []
+
+    def test_format_sources_has_citation_labels(self):
+        out = format_sources(SOURCES)
+        assert "[HUD Handbook 4000.1, p.188]" in out and "[HUD Handbook 4000.1, p.192]" in out
+
+
+class TestValidateCitations:
+    def test_grounded_citation_is_normalized(self):
+        flags, stats = validate_citations(
+            [{"severity": "high", "guideline_reference": "HUD Handbook 4000.1, p.192", "confidence": 0.9}], SOURCES)
+        assert flags[0]["grounded"] and "p.192" in flags[0]["guideline_reference"]
+        assert "Evaluating Liabilities" in flags[0]["guideline_reference"]
+        assert stats == {"flags": 1, "grounded": 1, "grounded_rate": 1.0}
+
+    def test_hallucinated_page_is_rejected_and_confidence_capped(self):
+        flags, stats = validate_citations(
+            [{"severity": "high", "guideline_reference": "HUD Handbook 4000.1, p.999", "confidence": 0.95}], SOURCES)
+        assert not flags[0]["grounded"] and flags[0]["confidence"] == 0.4
+        assert flags[0]["guideline_reference"].startswith("Uncited")
+        assert stats["grounded_rate"] == 0.0
+
+    def test_empty_reference_is_ungrounded(self):
+        flags, _ = validate_citations([{"severity": "low", "guideline_reference": ""}], SOURCES)
+        assert not flags[0]["grounded"]
+
+    def test_no_flags_is_fully_grounded(self):
+        assert validate_citations([], SOURCES)[1]["grounded_rate"] == 1.0
+
+
+class TestRiskAndRecommendation:
+    def test_ungrounded_flags_do_not_raise_score(self):
+        score, level = calculate_risk_score([{"severity": "critical", "grounded": False}])
+        assert score == 0 and level == "low"
+
+    def test_grounded_flags_sum_by_severity(self):
+        flags = [{"severity": "high", "grounded": True}, {"severity": "moderate", "grounded": True}]
+        assert calculate_risk_score(flags) == (30, "moderate")
+
+    def test_score_averages_with_llm_score(self):
+        assert calculate_risk_score([{"severity": "high", "grounded": True}], llm_score=60)[0] == 40
+
+    def test_score_is_capped_and_levels(self):
+        flags = [{"severity": "critical", "grounded": True}] * 5
+        assert calculate_risk_score(flags) == (100, "critical")
+        assert calculate_risk_score([], llm_score=-5)[0] == 0
+
+    def test_approve_when_clean(self):
+        assert determine_recommendation(10, []) == "APPROVE"
+
+    def test_deny_on_grounded_critical(self):
+        assert determine_recommendation(40, [{"severity": "critical", "grounded": True}]) == "DENY"
+
+    def test_deny_on_very_high_score(self):
+        assert determine_recommendation(80, []) == "DENY"
+
+    def test_manual_review_on_ungrounded_high_flag(self):
+        assert determine_recommendation(5, [{"severity": "high", "grounded": False}]) == "MANUAL_REVIEW"
+
+    def test_manual_review_on_moderate_score(self):
+        assert determine_recommendation(30, []) == "MANUAL_REVIEW"
+
+
+class TestAgentNodes:
+    def test_llm_failure_fails_safe_to_manual_review(self):
+        out = node_calculate_risk({"llm_ok": False, "risk_flags": [], "trace": AgentTrace().to_dict()})
+        assert out["recommendation"] == "MANUAL_REVIEW" and out["risk_score"] == 50
+
+    def test_llm_node_fails_without_sources(self):
+        out = node_llm_analyze({"document_text": "x", "retrieved_sources": [], "trace": AgentTrace().to_dict()})
+        assert out["llm_ok"] is False and "grounding" in out["error"]
+
+    def test_llm_node_parses_flags(self, monkeypatch):
+        import json
+        from app.services import ai_service
+
+        class Chain:
+            def invoke(self, payload):
+                assert "p.188" in payload["context"]
+                return json.dumps({"summary": "s", "overall_risk_score": 60, "risk_flags": [
+                    {"category": "Credit", "severity": "high", "guideline_reference": "p.188"}]})
+
+        monkeypatch.setattr(ai_service, "get_analysis_chain", lambda: Chain())
+        out = node_llm_analyze({"document_text": "app", "retrieved_sources": SOURCES, "trace": AgentTrace().to_dict()})
+        assert out["llm_ok"] and out["llm_risk_score"] == 60 and len(out["risk_flags"]) == 1
+
+    def test_llm_node_non_json_is_not_ok(self, monkeypatch):
+        from app.services import ai_service
+
+        class Chain:
+            def invoke(self, payload):
+                return "sorry, plain text"
+
+        monkeypatch.setattr(ai_service, "get_analysis_chain", lambda: Chain())
+        out = node_llm_analyze({"document_text": "app", "retrieved_sources": SOURCES, "trace": AgentTrace().to_dict()})
+        assert out["llm_ok"] is False and out["risk_flags"] == []
+
 
 class TestAgentTrace:
     """Test audit trail recording."""

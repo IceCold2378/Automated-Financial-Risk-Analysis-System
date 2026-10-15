@@ -152,4 +152,8 @@ python -m evaluation.run_eval --sweep                 # run the preset grid, log
 python -m evaluation.run_eval --chunk-size 500 --chunk-overlap 100 --k 5   # single config
 mlflow ui --backend-store-uri sqlite:///mlflow.db     # compare runs
 ```
-Results and the winning configuration: [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
+Results and the chosen configuration: [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
+
+### Cited analysis
+
+The agent retrieves HUD Handbook excerpts, the LLM must cite the page of the excerpt behind each flag, and a validation step rejects citations to pages that were not retrieved. Measure end-to-end citation quality with `python -m evaluation.e2e --mlflow` (see [docs/BASELINE.md](docs/BASELINE.md)).
