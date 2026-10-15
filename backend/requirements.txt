@@ -60,3 +60,4 @@ pytest-asyncio>=0.24.0
 httpx>=0.28.0
 pytest-cov>=6.0.0
 ruff>=0.8.0
+mlflow>=3.0.0

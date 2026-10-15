@@ -143,3 +143,13 @@ ruff check .                             # lint
 CI (`.github/workflows/ci.yml`) runs ruff and pytest with a coverage floor on every push/PR; the eval job runs on manual dispatch.
 The guideline corpus is HUD Handbook 4000.1, Section II.A.4 (public domain), rebuilt with `python scripts/build_hud_corpus.py <pdf>`.
 The golden set lives in `backend/tests/golden/questions.jsonl`. Details and measured numbers: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/BASELINE.md](docs/BASELINE.md).
+
+### Experiment tracking (MLflow)
+
+```bash
+cd backend
+python -m evaluation.run_eval --sweep                 # run the preset grid, logs to mlflow.db
+python -m evaluation.run_eval --chunk-size 500 --chunk-overlap 100 --k 5   # single config
+mlflow ui --backend-store-uri sqlite:///mlflow.db     # compare runs
+```
+Results and the winning configuration: [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
