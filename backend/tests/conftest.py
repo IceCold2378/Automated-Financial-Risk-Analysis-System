@@ -2,12 +2,11 @@
 Pytest fixtures for backend tests.
 """
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 from app.config import Settings, get_settings
-from app.models.database import Base, get_engine, get_session_factory, create_tables
+from app.models.database import Base, get_engine, get_session_factory
 
 
 def get_test_settings():
@@ -24,7 +23,6 @@ def get_test_settings():
 async def app():
     """Create a test app with a fresh database."""
     from app.main import app as fastapi_app
-    from app.models.database import get_db
 
     # Override settings
     fastapi_app.dependency_overrides[get_settings] = get_test_settings
@@ -124,7 +122,7 @@ def auth_headers(auth_token):
 @pytest_asyncio.fixture
 async def db_session(app):
     """Database session fixture."""
-    from app.models.database import get_session_factory, get_db
+    from app.models.database import get_db
     session_factory = get_session_factory()
     
     async with session_factory() as session:

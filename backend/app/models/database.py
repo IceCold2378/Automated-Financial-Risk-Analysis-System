@@ -2,12 +2,11 @@
 SQLAlchemy database models and session management.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Float, Text, DateTime, Enum as SQLEnum,
-    ForeignKey, JSON, create_engine
+    Column, Integer, String, Float, Text, DateTime, ForeignKey, JSON
 )
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from app.config import get_settings

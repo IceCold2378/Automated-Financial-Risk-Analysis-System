@@ -1,0 +1,27 @@
+{"id": "q01", "question": "What cumulative collection account balance triggers extra payment analysis of the collections?", "expected_pages": [200], "evidence": "\\$2,000"}
+{"id": "q02", "question": "At what total amount of disputed derogatory credit accounts does the borrower need special handling?", "expected_pages": [188], "evidence": "\\$1\\s?,000"}
+{"id": "q03", "question": "How long must a borrower wait after a bankruptcy discharge before qualifying?", "expected_pages": [190, 264], "evidence": "two years"}
+{"id": "q04", "question": "How many years after a foreclosure in which title transferred can a borrower get an FHA loan?", "expected_pages": [191], "evidence": "foreclosure"}
+{"id": "q05", "question": "What waiting period applies after a short sale?", "expected_pages": [191, 266], "evidence": "S\\s?hort S\\s?ale"}
+{"id": "q06", "question": "Which mortgage late-payment history in the last 12 months forces a downgrade to manual underwriting?", "expected_pages": [192], "evidence": "three or more late payments"}
+{"id": "q07", "question": "Can installment debts that will be paid off soon be excluded from the DTI calculation?", "expected_pages": [193, 267], "evidence": "10 months"}
+{"id": "q08", "question": "How is the monthly payment determined for a deferred student loan with no documented payment?", "expected_pages": [197, 271], "evidence": "1 percent of the outstanding balance"}
+{"id": "q09", "question": "How are 30-day accounts treated when they have been paid in full each month?", "expected_pages": [198, 273], "evidence": "30\\s?-\\s?Day\\s?A\\s?ccount"}
+{"id": "q10", "question": "For how long must the borrower's income be likely to continue to count as effective income?", "expected_pages": [202], "evidence": "three years"}
+{"id": "q11", "question": "How must employment and income history for the most recent two years be documented?", "expected_pages": [203], "evidence": "most\\s+recent two years"}
+{"id": "q12", "question": "When can overtime or bonus income that is under two years old be considered?", "expected_pages": [206], "evidence": "Overtime"}
+{"id": "q13", "question": "What minimum period of self-employment is required to use self-employment income?", "expected_pages": [209], "evidence": "self\\s?-\\s?employed for at least two years"}
+{"id": "q14", "question": "How is commission income calculated when earned for less than two years?", "expected_pages": [209], "evidence": "Commission Income"}
+{"id": "q15", "question": "What happens if disability income is due to expire within three years?", "expected_pages": [212], "evidence": "expire with\\s?in three years"}
+{"id": "q16", "question": "What proof is needed for voluntary child support payments to be counted as income?", "expected_pages": [213], "evidence": "12 months of canceled check"}
+{"id": "q17", "question": "What percentage of rental income can be counted for a property with less than two years of rental history?", "expected_pages": [220, 222], "evidence": "75 percent"}
+{"id": "q18", "question": "How must military income be treated if the term of service expires within the first 12 months?", "expected_pages": [214], "evidence": "Expiration Term of Service"}
+{"id": "q19", "question": "Can Social Security income that expires within three years of case number assignment be used?", "expected_pages": [217], "evidence": "may not be used for qualifying"}
+{"id": "q20", "question": "By what percentage can non-taxable income be grossed up?", "expected_pages": [227], "evidence": "15 percent"}
+{"id": "q21", "question": "When does an earnest money deposit need extra verification?", "expected_pages": [227], "evidence": "earnest money deposit exceeds 1 percent"}
+{"id": "q22", "question": "How many months of reserves are required to be verified after closing for certain properties?", "expected_pages": [230], "evidence": "three months.{0,3}\\s?PITI"}
+{"id": "q23", "question": "What minimum cash investment is required relative to the adjusted value of the property?", "expected_pages": [231], "evidence": "3\\.5 percent"}
+{"id": "q24", "question": "What portion of retirement account value may be counted as an asset?", "expected_pages": [234], "evidence": "60 percent"}
+{"id": "q25", "question": "What is the cap on interested party contributions as a share of the sales price?", "expected_pages": [237, 238], "evidence": "6 percent"}
+{"id": "q26", "question": "Are balloon payments allowed on a second lien used with the mortgage?", "expected_pages": [241, 243, 244], "evidence": "balloon payment within 10 years"}
+{"id": "q27", "question": "Does participating in consumer credit counseling require a manual underwriting downgrade?", "expected_pages": [192], "evidence": "does not require a downgrade"}

@@ -15,6 +15,7 @@ venv/
 
 # ChromaDB
 chroma_db/
+chroma_eval*/
 
 # IDEs
 .vscode/
@@ -32,3 +33,10 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+data_raw/
+mlruns/
+mlflow.db
+.coverage
+coverage.xml
+htmlcov/
+.ruff_cache/

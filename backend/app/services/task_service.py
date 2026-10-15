@@ -9,7 +9,6 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import AsyncGenerator, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession

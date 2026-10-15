@@ -5,9 +5,7 @@ Tests for Admin endpoints and API Keys feature.
 import pytest
 from httpx import AsyncClient
 
-from app.models.database import ApiKey, User
-from app.services.api_key_service import hash_key
-from datetime import datetime, timezone, timedelta
+from app.models.database import ApiKey
 
 pytestmark = pytest.mark.asyncio
 

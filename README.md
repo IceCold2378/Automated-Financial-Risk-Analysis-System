@@ -129,10 +129,17 @@ All settings are managed via environment variables (`.env` file). See `.env.exam
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing & Evaluation
 
 ```bash
 cd backend
-pip install pytest pytest-asyncio httpx aiosqlite
-pytest tests/ -v
+pip install -r requirements.txt
+pytest                                   # fast unit/API tests, no network
+pytest --cov=app --cov=evaluation        # with coverage
+pytest -m eval -s                        # retrieval hit-rate on the golden set (needs OPENROUTER_API_KEY)
+ruff check .                             # lint
 ```
+
+CI (`.github/workflows/ci.yml`) runs ruff and pytest with a coverage floor on every push/PR; the eval job runs on manual dispatch.
+The guideline corpus is HUD Handbook 4000.1, Section II.A.4 (public domain), rebuilt with `python scripts/build_hud_corpus.py <pdf>`.
+The golden set lives in `backend/tests/golden/questions.jsonl`. Details and measured numbers: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/BASELINE.md](docs/BASELINE.md).

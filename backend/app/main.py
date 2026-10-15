@@ -13,7 +13,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.exceptions import AppException, app_exception_handler, generic_exception_handler
 from app.middleware.logging import RequestLoggingMiddleware
-from app.models.database import create_tables
 from app.services.vector_service import build_vector_db
 from app.services.ai_service import build_rag_chain
 

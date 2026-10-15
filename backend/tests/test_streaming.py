@@ -2,7 +2,6 @@
 Tests for background task SSE streaming.
 """
 
-import asyncio
 import pytest
 from httpx import AsyncClient
 
@@ -37,7 +36,7 @@ async def test_create_and_update_task(db_session):
 
 async def test_streaming_endpoint_404(client: AsyncClient, token: str):
     response = await client.get(
-        f"/api/v1/stream/task/invalid_task_id", 
+        "/api/v1/stream/task/invalid_task_id", 
         params={"token": token}
     )
     assert response.status_code == 404

@@ -1,0 +1,8 @@
+line-length = 120
+extend-exclude = ["alembic", "/core.py", "/main.py"]
+[lint]
+select = ["E", "F"]
+ignore = ["E501", "E402"]
+[lint.per-file-ignores]
+"test_analysis_speed.py" = ["E701"]
+"tests/conftest.py" = ["F841"]

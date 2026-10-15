@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any
 
 from app.integrations.base import IntegrationBase, IntegrationHealth, IntegrationStatus
 

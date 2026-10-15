@@ -13,8 +13,6 @@ wraps all three under a single IntegrationBase interface.
 from __future__ import annotations
 
 import logging
-import time
-from typing import Any
 
 from app.integrations.base import IntegrationBase, IntegrationHealth, IntegrationStatus
 

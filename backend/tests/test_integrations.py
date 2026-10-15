@@ -5,9 +5,8 @@ Tests the integration registry, connector base classes, webhook manager,
 and the integrations API endpoints. All external services are mocked.
 """
 
-import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from app.integrations.base import (
     IntegrationBase,

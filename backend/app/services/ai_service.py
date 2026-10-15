@@ -10,7 +10,6 @@ Compatible with LangChain v1.0+ (uses LCEL — no langchain.chains).
 import json
 import time
 import logging
-from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser

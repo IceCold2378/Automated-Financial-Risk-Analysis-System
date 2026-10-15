@@ -5,7 +5,6 @@ Each tool performs a focused task (guideline retrieval, risk calculation,
 compliance checking) and returns structured data back to the agent state.
 """
 
-import json
 import logging
 import re
 from typing import Any

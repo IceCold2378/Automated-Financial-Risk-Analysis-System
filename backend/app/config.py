@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = "./chroma_db"
     CHROMA_COLLECTION_NAME: str = "underwriting_guidelines"
     VECTOR_SEARCH_K: int = 5
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 200
+    EMBEDDING_MODEL: str = "openai/text-embedding-3-small"  # OpenRouter/OpenAI embedding model
 
     # --- Document Processing ---
     MAX_FILE_SIZE_MB: int = 25
@@ -116,7 +119,7 @@ class Settings(BaseSettings):
     # --- Guidelines ---
     GUIDELINES_PATH: str = Field(
         default="",
-        description="Path to guidelines file (defaults to data/guidelines.txt)"
+        description="Path to guidelines file (.txt or page-level .jsonl; defaults to the HUD 4000.1 corpus)"
     )
 
     @property
@@ -124,7 +127,7 @@ class Settings(BaseSettings):
         if self.GUIDELINES_PATH:
             return self.GUIDELINES_PATH
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return os.path.join(base_dir, "data", "guidelines.txt")
+        return os.path.join(base_dir, "data", "hud_4000_1_borrower_underwriting.jsonl")
 
     model_config = {
         "env_file": ".env",

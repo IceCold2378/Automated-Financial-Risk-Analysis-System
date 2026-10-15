@@ -5,6 +5,12 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      run_eval:
+        description: "Run retrieval eval against the golden set (uses OPENROUTER_API_KEY secret)"
+        type: boolean
+        default: true
 
 jobs:
   backend-test:
@@ -50,14 +56,48 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Run Backend Tests
+    - name: Lint (ruff)
+      working-directory: ./backend
+      run: |
+        pip install ruff
+        ruff check .
+
+    - name: Run Backend Tests with coverage
       working-directory: ./backend
       env:
         ENVIRONMENT: testing
         DATABASE_URL: sqlite+aiosqlite:///:memory:
         REDIS_URL: redis://localhost:6379/0
       run: |
-        pytest tests/ -v
+        pytest tests/ -v --cov=app --cov=evaluation --cov-report=term --cov-report=xml --cov-fail-under=50
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-xml
+        path: backend/coverage.xml
+
+  retrieval-eval:
+    name: Retrieval Eval (golden set) 🎯
+    if: github.event_name == 'workflow_dispatch' && inputs.run_eval
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: "pip"
+    - name: Install Dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Run eval tests
+      working-directory: ./backend
+      env:
+        LLM_PROVIDER: openrouter
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: pytest tests/ -m eval -v -s
 
   frontend-build:
     name: Frontend React Build ⚛️

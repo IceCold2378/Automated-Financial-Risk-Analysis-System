@@ -2,10 +2,8 @@
 Tests for the agentic analysis pipeline.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 
-from app.agent.state import AgentState, AgentConfig, AgentTrace, TraceStep, StepStatus
+from app.agent.state import AgentConfig, AgentTrace, StepStatus
 from app.agent.tools import (
     extract_document_facts,
     calculate_risk_score,
