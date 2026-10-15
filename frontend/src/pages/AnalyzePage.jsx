@@ -24,6 +24,16 @@ export default function AnalyzePage() {
         setProgress(0);
     };
 
+    const resetAnalysis = () => {
+        setTaskId(null);
+        setFile(null);
+        setResult(null);
+        setError('');
+        setStatus('idle');
+        setTraceSteps([]);
+        setProgress(0);
+    };
+
     const handleDrop = useCallback((e) => {
         e.preventDefault();
         setDragOver(false);
@@ -51,7 +61,7 @@ export default function AnalyzePage() {
 
     // 2. SSE Subscription
     useEffect(() => {
-        if (!taskId || status === 'complete' || status === 'error') return;
+        if (!taskId || status !== 'working') return;
 
         const token = localStorage.getItem('token');
         const url = `/api/v1/stream/task/${taskId}?token=${token}`;
@@ -224,7 +234,7 @@ export default function AnalyzePage() {
             {status === 'error' && (
                 <div className="alert error" style={{ marginTop: '16px' }}>
                     ⚠️ {error}
-                    <button className="btn btn-secondary" style={{ marginLeft: '16px' }} onClick={() => setStatus('idle')}>Try Again</button>
+                    <button className="btn btn-secondary" style={{ marginLeft: '16px' }} onClick={resetAnalysis}>Try Again</button>
                 </div>
             )}
 
@@ -287,12 +297,7 @@ export default function AnalyzePage() {
 
                             <button
                                 className="btn btn-primary btn-block"
-                                onClick={() => { 
-                                    setResult(null); 
-                                    setFile(null); 
-                                    setStatus('idle');
-                                    setTraceSteps([]);
-                                }}
+                                onClick={resetAnalysis}
                             >
                                 🔍 Analyze Another
                             </button>

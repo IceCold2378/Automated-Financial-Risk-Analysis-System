@@ -31,11 +31,9 @@ def _get_embeddings():
             logger.warning("langchain-openai not installed, falling back to Ollama embeddings")
 
     elif settings.LLM_PROVIDER == LLMProvider.OPENROUTER:
-        # OpenRouter supports various embedding models.
-        # Primary: Google (excellent performance) / Alternative: OpenAI proxied
         try:
             from langchain_openai import OpenAIEmbeddings
-            embedding_model = "google/text-embedding-004"  # High quality & cloud-ready
+            embedding_model = "openai/text-embedding-3-small"
             logger.info("Using OpenRouter embeddings: model=%s", embedding_model)
             return OpenAIEmbeddings(
                 openai_api_key=settings.OPENROUTER_API_KEY,
@@ -44,6 +42,14 @@ def _get_embeddings():
             )
         except Exception as e:
             logger.warning("OpenRouter embeddings failed (%s), falling back to Ollama", e)
+
+    # Default fallback to Ollama embeddings
+    logger.info("Using Ollama embeddings (%s at %s)", settings.OLLAMA_MODEL, settings.OLLAMA_HOST)
+    return OllamaEmbeddings(
+        base_url=settings.OLLAMA_HOST,
+        model=settings.OLLAMA_MODEL,
+    )
+
 
 
 def build_vector_db(guidelines_path: str | None = None):

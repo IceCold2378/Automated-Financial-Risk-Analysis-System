@@ -113,7 +113,7 @@ def _get_llm():
     elif provider == LLMProvider.OPENROUTER:
         try:
             from langchain_openai import ChatOpenAI
-            model_name = settings.OPENROUTER_MODEL or "google/gemini-2.0-flash-001"
+            model_name = settings.OPENROUTER_MODEL or "google/gemini-2.5-flash"
             logger.info("Using OpenRouter provider: model=%s", model_name)
             return ChatOpenAI(
                 api_key=settings.OPENROUTER_API_KEY,
