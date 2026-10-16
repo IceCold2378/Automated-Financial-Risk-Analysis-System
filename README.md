@@ -157,3 +157,7 @@ Results and the chosen configuration: [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)
 ### Cited analysis
 
 The agent retrieves HUD Handbook excerpts, the LLM must cite the page of the excerpt behind each flag, and a validation step rejects citations to pages that were not retrieved. Measure end-to-end citation quality with `python -m evaluation.e2e --mlflow` (see [docs/BASELINE.md](docs/BASELINE.md)).
+
+### MCP server
+
+`python -m mcp_server.server` exposes `search_guidelines`, `get_citation`, `list_documents` and `analyze_document` as read-only MCP tools. Setup, schemas and verified calls: [docs/MCP.md](docs/MCP.md).

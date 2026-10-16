@@ -1,0 +1,11 @@
+LOAN APPLICATION
+Applicant: Jordan Ellis
+Age: 36
+Credit score: 690
+Annual income: 78000
+Loan amount: 245000
+Down payment: 8575
+DTI ratio: 44%
+Employment: self-employed consultant for 14 months.
+Credit history: Chapter 7 bankruptcy discharged 14 months ago. Collection accounts totaling $3,200 remain unpaid.
+Student loan of $30,000 is in deferment with no payment shown on the credit report.

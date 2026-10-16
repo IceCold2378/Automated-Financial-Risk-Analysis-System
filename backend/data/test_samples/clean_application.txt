@@ -1,0 +1,11 @@
+LOAN APPLICATION
+Applicant: Hannah Wright
+Age: 35
+Credit score: 782
+Annual income: 120000
+Loan amount: 250000
+Down payment: 25000
+DTI ratio: 24%
+Employment: W-2 employee with the same employer for 10 years, income verified.
+Credit history: no bankruptcies, collections, late payments or disputed accounts.
+Reserves: 6 months of PITI in savings.
