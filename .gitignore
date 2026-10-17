@@ -40,3 +40,4 @@ mlflow.db
 coverage.xml
 htmlcov/
 .ruff_cache/
+backend/data/risk/
