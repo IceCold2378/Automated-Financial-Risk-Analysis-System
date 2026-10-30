@@ -20,7 +20,7 @@ Four stacked branches, merge in this order. All numbers were measured in real ru
 
 ## 4. `feat/mcp-server`: MCP server
 - `mcp_server/`: four read-only tools (`search_guidelines`, `get_citation`, `list_documents`, `analyze_document`) over stdio, input validation, allowlisted document ids. 20 unit tests. See `docs/MCP.md`.
-- Not yet verified over MCP with live API calls (the OpenRouter account ran out of credits); stated in the doc.
+- Verified end to end over MCP with live embedding and LLM calls (see the doc).
 
 ## Known limitations
 - Small evaluation sets (27 questions, 10 applications); the configuration was chosen on the same data it is scored on.
