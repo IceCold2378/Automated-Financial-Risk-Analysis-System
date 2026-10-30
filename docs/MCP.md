@@ -47,9 +47,28 @@ Error executing tool search_guidelines: query must not be empty
 === analyze_document {"doc_id": "../../.env"}   isError=True
 Error executing tool analyze_document: doc_id must be lowercase letters, digits, '-' or '_' (see list_documents)
 ```
-In-process (not via MCP) `search_guidelines("chapter 7 bankruptcy waiting period", 2)` returned pages `[264, 265]` in 14.2 s including the one-time index build.
+### Live calls (embeddings + LLM), also through the MCP client
+`python -m mcp_server.demo_client --live`, captured 2026-10-30 with `google/gemini-2.5-flash` and `baai/bge-large-en-v1.5` via OpenRouter. The whole live check cost about $0.003.
 
-**Not yet captured through the MCP client:** live `search_guidelines` and `analyze_document` calls (`python -m mcp_server.demo_client --live`). The OpenRouter account ran out of credits during this session (HTTP 402), so these were not verified end to end over MCP. Their logic is covered by unit tests with a fake retriever and analyzer (`tests/test_mcp_tools.py`).
+```
+=== search_guidelines {"query": "how long after a Chapter 7 bankruptcy discharge can a borrower qualify", "top_k": 2}   isError=False  4.2s
+[{"citation": "HUD Handbook 4000.1, p.264", "page": 264, "section": "Evaluating Credit History (Manual)",
+  "text": "Bankruptcy (Manual) (1) Standard: Chapter 7 ... at least two years have elapsed since the date of the bankruptcy discharge ..."},
+ {"citation": "HUD Handbook 4000.1, p.265", "page": 265, ...}]
+
+=== analyze_document {"doc_id": "risky_application"}   isError=False  7.7s
+risk_score 92, risk_level critical, recommendation DENY, grounded_flags 6 of 6
+  critical | Credit History         | HUD Handbook 4000.1, p.190 (Evaluating Credit History (TOTAL))
+  moderate | Credit History         | HUD Handbook 4000.1, p.188 (Evaluating Credit History (TOTAL))
+  high     | Employment Stability   | HUD Handbook 4000.1, p.209 (Self-Employment Income (TOTAL))
+  high     | Liabilities and Debts  | HUD Handbook 4000.1, p.196 (Evaluating Liabilities and Debts (TOTAL))
+  high     | Liabilities and Debts  | HUD Handbook 4000.1, p.193 (Evaluating Liabilities and Debts (TOTAL))
+  moderate | Credit History         | HUD Handbook 4000.1, p.256 (Types of Credit History (Manual ))
+```
+`clean_application` (called in-process, same code): score 5, low, APPROVE, 0 flags. The planted issues in `risky_application` (bankruptcy 14 months ago, collections, self-employment 14 months, deferred student loan) map to the cited pages 190, 188, 209 and 193/196. Single runs; the LLM output varies from run to run.
+
+### Windows note
+Importing the vector/ML libraries lazily inside a tool call hung when the server was launched by an MCP client on Windows (the native-extension load stalled in a worker thread). The server now imports them on the main thread at startup, so the first `initialize` takes a few seconds longer and tool calls are fast. Set `MCP_LOG_FILE=<path>` to write a DEBUG log (plus a stack dump 25 s after start) when diagnosing client issues.
 
 ## Known limitations
 - Handbook text contains a few `�` characters where the PDF's curly apostrophes did not decode.

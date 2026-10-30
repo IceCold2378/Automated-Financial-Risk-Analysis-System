@@ -71,7 +71,7 @@ class Settings(BaseSettings):
 
     # --- OpenRouter ---
     OPENROUTER_API_KEY: str = ""
-    OPENROUTER_MODEL: str = "anthropic/claude-sonnet-4-20250514"
+    OPENROUTER_MODEL: str = "google/gemini-2.5-flash"
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
     # --- Agent ---

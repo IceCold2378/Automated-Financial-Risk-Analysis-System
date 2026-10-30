@@ -7,15 +7,27 @@ import logging
 import os
 import sys
 
+import anyio
+
 # Resolve .env and ./chroma_db relative to backend/ no matter where the client launches us.
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.getcwd())
 # stdout carries the MCP protocol; all logging must go to stderr.
-logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
+_log_file = os.getenv("MCP_LOG_FILE")  # optional debug log (DEBUG level) for diagnosing client issues
+logging.basicConfig(level=logging.DEBUG if _log_file else logging.WARNING,
+                    **({"filename": _log_file} if _log_file else {"stream": sys.stderr}))
+
+if _log_file:
+    import faulthandler
+    faulthandler.dump_traceback_later(25, file=open(_log_file + ".trace", "w"))
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 from mcp.types import ToolAnnotations  # noqa: E402
 
+# Import the heavy ML/vector dependencies on the main thread at startup. Loading their native
+# extensions lazily from a worker thread hung under client-launched stdio on Windows.
+from app.agent import orchestrator  # noqa: E402,F401
+from app.services import vector_service  # noqa: E402,F401
 from mcp_server import tools  # noqa: E402
 
 mcp = FastMCP("underwriting-assistant")
@@ -23,12 +35,13 @@ READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotent
 
 
 @mcp.tool(annotations=READ_ONLY)
-def search_guidelines(query: str, top_k: int = 5) -> list[dict]:
+async def search_guidelines(query: str, top_k: int = 5) -> list[dict]:
     """Semantic search over HUD Handbook 4000.1 borrower-underwriting guidelines.
 
     Returns up to top_k excerpts (1-10), each with a citation label, page, section and text.
     """
-    return tools.search_guidelines(query, top_k)
+    # blocking embedding + vector search: keep it off the event loop
+    return await anyio.to_thread.run_sync(tools.search_guidelines, query, top_k)
 
 
 @mcp.tool(annotations=READ_ONLY)

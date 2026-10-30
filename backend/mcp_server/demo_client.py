@@ -4,6 +4,7 @@ Run from backend/:  python -m mcp_server.demo_client
 """
 import asyncio
 import json
+import os
 import sys
 import time
 from datetime import timedelta
@@ -31,7 +32,7 @@ def short(text: str, n: int = 700) -> str:
 
 
 async def main():
-    params = StdioServerParameters(command=sys.executable, args=["-m", "mcp_server.server"])
+    params = StdioServerParameters(command=sys.executable, args=["-m", "mcp_server.server"], env=dict(os.environ))
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
