@@ -160,4 +160,46 @@ The agent retrieves HUD Handbook excerpts, the LLM must cite the page of the exc
 
 ### MCP server
 
-`python -m mcp_server.server` exposes `search_guidelines`, `get_citation`, `list_documents` and `analyze_document` as read-only MCP tools. Setup, schemas and verified calls: [docs/MCP.md](docs/MCP.md).
+The retrieval and analysis pipeline is also available as a [Model Context Protocol](https://modelcontextprotocol.io) server, so any MCP-compatible client (a desktop AI assistant, an IDE agent, or your own script) can use it without knowing anything about this codebase. It is separate from the web app and runs locally over stdio.
+
+| Tool | What it does |
+|---|---|
+| `search_guidelines(query, top_k)` | Semantic search over the HUD Handbook; returns passages with page citations |
+| `get_citation(page, section?)` | Full text of one handbook page, to verify a citation against the source |
+| `list_documents()` | Loan applications available for analysis |
+| `analyze_document(doc_id)` | Full cited risk analysis: score, recommendation and flags, each tied to a handbook page |
+
+All tools are read-only; inputs are validated and `analyze_document` only accepts documents returned by `list_documents`.
+
+**Run and connect**
+
+```bash
+cd backend
+python -m mcp_server.server            # stdio server (needs OPENROUTER_API_KEY in backend/.env)
+python -m mcp_server.demo_client --live   # quick end-to-end check using a real MCP client
+```
+
+To use it from an MCP client, add the server to the client's configuration (the exact file depends on the client):
+
+```json
+{ "mcpServers": { "underwriting-assistant": {
+    "command": "<repo>/venv/Scripts/python.exe",
+    "args": ["-m", "mcp_server.server"],
+    "cwd": "<repo>/backend" } } }
+```
+
+**Things you can then ask the connected assistant**
+- "Search the guidelines: how long after a Chapter 7 bankruptcy discharge can a borrower qualify?" (returns pages 264-265 with the two-year rule)
+- "Show me the full text of handbook page 190."
+- "List the available applications, then analyze `risky_application` and explain each flag using its cited page."
+
+Example output from a real run (single run; model output varies):
+
+```
+analyze_document("risky_application") -> score 92, critical, DENY, 6 of 6 flags cite a retrieved page
+  critical | Credit History        | HUD Handbook 4000.1, p.190   (bankruptcy discharged 14 months ago)
+  high     | Employment Stability | HUD Handbook 4000.1, p.209   (self-employed 14 months)
+  high     | Liabilities and Debts| HUD Handbook 4000.1, p.193 / p.196   (deferred student loan)
+```
+
+Tool schemas, security notes, a Windows startup note and the full captured calls: [docs/MCP.md](docs/MCP.md).
