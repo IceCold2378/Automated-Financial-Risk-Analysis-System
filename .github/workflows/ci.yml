@@ -69,7 +69,7 @@ jobs:
         DATABASE_URL: sqlite+aiosqlite:///:memory:
         REDIS_URL: redis://localhost:6379/0
       run: |
-        pytest tests/ -v --cov=app --cov=evaluation --cov=mcp_server --cov-report=term --cov-report=xml --cov-fail-under=50
+        pytest tests/ -v --cov=app --cov=evaluation --cov=mcp_server --cov=risk_model --cov-report=term --cov-report=xml --cov-fail-under=50
 
     - name: Upload coverage report
       uses: actions/upload-artifact@v4

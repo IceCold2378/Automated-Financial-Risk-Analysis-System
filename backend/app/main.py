@@ -134,7 +134,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Routers ────────────────────────────────────────────────────────
 
-from app.routers import health, auth, analysis, integrations, admin, streaming
+from app.routers import health, auth, analysis, integrations, admin, streaming, risk
 
 app.include_router(health.router, prefix=settings.API_PREFIX)
 app.include_router(auth.router, prefix=settings.API_PREFIX)
@@ -142,6 +142,7 @@ app.include_router(analysis.router, prefix=settings.API_PREFIX)
 app.include_router(integrations.router, prefix=settings.API_PREFIX)
 app.include_router(admin.router, prefix=settings.API_PREFIX)
 app.include_router(streaming.router, prefix=settings.API_PREFIX)
+app.include_router(risk.router, prefix=settings.API_PREFIX)
 
 
 # ── Integration Registration ───────────────────────────────────────

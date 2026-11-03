@@ -203,3 +203,7 @@ analyze_document("risky_application") -> score 92, critical, DENY, 6 of 6 flags 
 ```
 
 Tool schemas, security notes, a Windows startup note and the full captured calls: [docs/MCP.md](docs/MCP.md).
+
+### Risk model (GLM vs XGBoost)
+
+`python -m risk_model.train` trains a regularized logistic regression and XGBoost on a public credit-default dataset, logs both to MLflow (`risk-model`), and saves the deployed model. `POST /api/v1/risk/score` returns the default probability and top contributing features. Data, metrics and limitations: [docs/MODEL_CARD.md](docs/MODEL_CARD.md).
