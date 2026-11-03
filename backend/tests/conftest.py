@@ -2,11 +2,18 @@
 Pytest fixtures for backend tests.
 """
 
-import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+import os
 
-from app.config import Settings, get_settings
-from app.models.database import Base, get_engine, get_session_factory
+# The tests drop and recreate every table, so they must NEVER run against the dev database.
+# Environment variables take priority over backend/.env, and this runs before the app is imported.
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_underwriting.db"
+os.environ["ENVIRONMENT"] = "testing"
+
+import pytest_asyncio  # noqa: E402
+from httpx import AsyncClient, ASGITransport  # noqa: E402
+
+from app.config import Settings, get_settings  # noqa: E402
+from app.models.database import Base, get_engine, get_session_factory  # noqa: E402
 
 
 def get_test_settings():
@@ -35,7 +42,9 @@ async def app():
     # Create tables
     settings = get_test_settings()
     engine = get_engine()
-    
+    # Safety net: refuse to drop tables on anything that is not the test database.
+    assert "test" in str(engine.url), f"refusing to reset non-test database: {engine.url}"
+
     # Needs to be inside the test loop to avoid connection issues
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
